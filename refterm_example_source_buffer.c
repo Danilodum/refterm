@@ -208,26 +208,29 @@ static glyph_hash ComputeGlyphHash(size_t Count, char unsigned *At, char unsigne
     }
 
     size_t Overhang = Count % 16;
-    size_t Overread = 16 - Overhang;
-
-    size_t OverhangMaskOffset = 16 - Overhang;
-    size_t ShuffleTableOffset = 0;
-
-    if(((uintptr_t)At ^ ((uintptr_t)At + 16)) & 4096) {
-      // The final read would cross a page boundary.
-      // Offset it so it doesn't.
-      At -= Overread;
-      OverhangMaskOffset = 0;
-      ShuffleTableOffset = Overread;
+    if(Overhang)
+    {
+        size_t Overread = 16 - Overhang;
+    
+        size_t OverhangMaskOffset = 16 - Overhang;
+        size_t ShuffleTableOffset = 0;
+    
+        if(((uintptr_t)At ^ ((uintptr_t)At + 16)) & 4096) {
+          // The final read would cross a page boundary.
+          // Offset it so it doesn't.
+          At -= Overread;
+          OverhangMaskOffset = 0;
+          ShuffleTableOffset = Overread;
+        }
+    
+        __m128i In = _mm_loadu_si128((__m128i *)At);
+        In = _mm_shuffle_epi8(_mm_and_si128(In, _mm_loadu_si128((__m128i *)(OverhangMask + OverhangMaskOffset))), _mm_loadu_si128((__m128i *)(ShuffleTable + ShuffleTableOffset)));
+        HashValue = _mm_xor_si128(HashValue, In);
+        HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
+        HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
+        HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
+        HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
     }
-
-    __m128i In = _mm_loadu_si128((__m128i *)At);
-    In = _mm_shuffle_epi8(_mm_and_si128(In, _mm_loadu_si128((__m128i *)(OverhangMask + OverhangMaskOffset))), _mm_loadu_si128((__m128i *)(ShuffleTable + ShuffleTableOffset)));
-    HashValue = _mm_xor_si128(HashValue, In);
-    HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
-    HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
-    HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
-    HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
 
     Result.Value = HashValue;
 
