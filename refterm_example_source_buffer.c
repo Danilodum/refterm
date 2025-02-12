@@ -163,6 +163,11 @@ static char unsigned DefaultSeed[16] =
     178, 201, 95, 240, 40, 41, 143, 216,
     2, 209, 178, 114, 232, 4, 176, 188
 };
+static char unsigned ShuffleTable[32] =
+{
+  0, 1, 2, 3,  4, 5, 6, 7,  8, 9, 10, 11,  12, 13, 14, 15,
+  0xFF, 0xFF, 0xFF, 0xFF,  0xFF, 0xFF, 0xFF, 0xFF,  0xFF, 0xFF, 0xFF, 0xFF,  0xFF, 0xFF, 0xFF, 0xFF
+};
 static glyph_hash ComputeGlyphHash(size_t Count, char unsigned *At, char unsigned *Seedx16)
 {
     /* TODO(casey):
@@ -203,18 +208,21 @@ static glyph_hash ComputeGlyphHash(size_t Count, char unsigned *At, char unsigne
     }
 
     size_t Overhang = Count % 16;
+    size_t Overread = 16 - Overhang;
 
+    size_t OverhangMaskOffset = 16 - Overhang;
+    size_t ShuffleTableOffset = 0;
 
-#if 0
+    if(((uintptr_t)At ^ ((uintptr_t)At + 16)) & 4096) {
+      // The final read would cross a page boundary.
+      // Offset it so it doesn't.
+      At -= Overread;
+      OverhangMaskOffset = 0;
+      ShuffleTableOffset = Overread;
+    }
+
     __m128i In = _mm_loadu_si128((__m128i *)At);
-#else
-    // TODO(casey): This needs to be improved - it's too slow, and the #if 0 branch would be nice but can't
-    // work because of overrun, etc.
-    char Temp[16];
-    __movsb((unsigned char *)Temp, At, Overhang);
-    __m128i In = _mm_loadu_si128((__m128i *)Temp);
-#endif
-    In = _mm_and_si128(In, _mm_loadu_si128((__m128i *)(OverhangMask + 16 - Overhang)));
+    In = _mm_shuffle_epi8(_mm_and_si128(In, _mm_loadu_si128((__m128i *)(OverhangMask + OverhangMaskOffset))), _mm_loadu_si128((__m128i *)(ShuffleTable + ShuffleTableOffset)));
     HashValue = _mm_xor_si128(HashValue, In);
     HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
     HashValue = _mm_aesdec_si128(HashValue, _mm_setzero_si128());
