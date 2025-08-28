@@ -16,6 +16,9 @@
 #include <intrin.h>
 #include <usp10.h>
 #include <strsafe.h>
+
+#define KBTS_STATIC
+#include "kb_text_shape.h"
 #include <stdarg.h>
 
 #include <intrin.h>

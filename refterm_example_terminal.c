@@ -520,6 +520,177 @@ static void ParseWithUniscribe(example_terminal *Terminal, source_buffer_range U
     }
 }
 
+static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Range, cursor_state *Cursor)
+{
+    kb_partitioner *KBPartitioner = &Terminal->KBPartitioner;
+    
+    // Initialize KB break state
+    kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
+    
+    // Process UTF-8 string directly (no conversion needed like Uniscribe)
+    size_t StringAt = 0;
+    uint32_t CurrentPosition = 0;
+    
+    // Feed all codepoints to the break state
+    while (StringAt < UTF8Range.Count)
+    {
+        kbts_decode Decode = kbts_DecodeUtf8(UTF8Range.Data + StringAt, UTF8Range.Count - StringAt);
+        StringAt += Decode.SourceCharactersConsumed;
+        
+        if (Decode.Valid)
+        {
+            int EndOfText = (StringAt >= UTF8Range.Count);
+            kbts_BreakAddCodepoint(&KBPartitioner->BreakState, Decode.Codepoint, 1, EndOfText);
+            CurrentPosition++;
+        }
+    }
+    
+    // Extract breaks and build segments
+    KBPartitioner->SegmentCount = 0;
+    KBPartitioner->SegP[KBPartitioner->SegmentCount++] = 0; // Start of first segment
+    
+    uint32_t LastBreakPosition = 0;
+    kbts_break Break;
+    
+    while (kbts_Break(&KBPartitioner->BreakState, &Break))
+    {
+        // For text shaping, we're interested in script and direction breaks
+        if ((Break.Flags & (KBTS_BREAK_FLAG_SCRIPT | KBTS_BREAK_FLAG_DIRECTION | KBTS_BREAK_FLAG_WORD)) && 
+            Break.Position > LastBreakPosition)
+        {
+            KBPartitioner->SegP[KBPartitioner->SegmentCount++] = Break.Position;
+            LastBreakPosition = Break.Position;
+        }
+    }
+    
+    // Ensure we end with the full string length
+    if (KBPartitioner->SegmentCount == 0 || KBPartitioner->SegP[KBPartitioner->SegmentCount - 1] != CurrentPosition)
+    {
+        KBPartitioner->SegP[KBPartitioner->SegmentCount++] = CurrentPosition;
+    }
+    
+    // Process segments similar to Uniscribe version
+    int Segment = 0;
+    
+    for (uint32_t SegIndex = 0; SegIndex < KBPartitioner->SegmentCount - 1; ++SegIndex)
+    {
+        uint32_t Start = KBPartitioner->SegP[SegIndex];
+        uint32_t End = KBPartitioner->SegP[SegIndex + 1];
+        uint32_t SegmentLength = End - Start;
+        
+        if (SegmentLength > 0)
+        {
+            // Convert segment positions back to UTF-8 byte offsets
+            size_t UTF8Start = 0;
+            size_t UTF8End = 0;
+            uint32_t CodepointCount = 0;
+            size_t ByteOffset = 0;
+            
+            // Find UTF-8 byte range for this segment
+            while (ByteOffset < UTF8Range.Count && CodepointCount <= End)
+            {
+                if (CodepointCount == Start)
+                    UTF8Start = ByteOffset;
+                if (CodepointCount == End)
+                {
+                    UTF8End = ByteOffset;
+                    break;
+                }
+                
+                kbts_decode Decode = kbts_DecodeUtf8(UTF8Range.Data + ByteOffset, UTF8Range.Count - ByteOffset);
+                ByteOffset += Decode.SourceCharactersConsumed;
+                if (Decode.Valid)
+                    CodepointCount++;
+            }
+            
+            if (CodepointCount == End)
+                UTF8End = ByteOffset;
+            
+            size_t UTF8SegmentLength = UTF8End - UTF8Start;
+            
+            if (UTF8SegmentLength > 0)
+            {
+                char *UTF8Segment = UTF8Range.Data + UTF8Start;
+                
+                // Check if segment contains only direct codepoints
+                int IsAllDirect = 1;
+                size_t CheckOffset = 0;
+                uint32_t DirectCodepoint = 0;
+                
+                if (UTF8SegmentLength == 1 && UTF8Segment[0] >= MinDirectCodepoint && UTF8Segment[0] <= MaxDirectCodepoint)
+                {
+                    DirectCodepoint = UTF8Segment[0];
+                }
+                else
+                {
+                    IsAllDirect = 0;
+                }
+                
+                if (IsAllDirect && UTF8SegmentLength == 1)
+                {
+                    // Handle direct codepoint (ASCII)
+                    renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
+                    if (Cell)
+                    {
+                        glyph_props Props = Cursor->Props;
+                        if (Terminal->DebugHighlighting)
+                        {
+                            Props.Background = 0x00800000;
+                        }
+                        SetCellDirect(Terminal->ReservedTileTable[DirectCodepoint - MinDirectCodepoint], Props, Cell);
+                    }
+                    AdvanceColumn(Terminal, &Cursor->At);
+                }
+                else
+                {
+                    // Handle complex text - convert to UTF-16 for glyph generation
+                    wchar_t UTF16Buffer[1024];
+                    DWORD UTF16Count = MultiByteToWideChar(CP_UTF8, 0, UTF8Segment, (DWORD)UTF8SegmentLength, UTF16Buffer, ArrayCount(UTF16Buffer));
+                    
+                    if (UTF16Count > 0)
+                    {
+                        // Generate glyphs (similar to Uniscribe path)
+                        int Prepped = 0;
+                        glyph_hash RunHash = ComputeGlyphHash(2 * UTF16Count, (char unsigned *)UTF16Buffer, DefaultSeed);
+                        glyph_dim GlyphDim = GetGlyphDim(&Terminal->GlyphGen, Terminal->GlyphTable, UTF16Count, UTF16Buffer, RunHash);
+                        
+                        for (uint32_t TileIndex = 0; TileIndex < GlyphDim.TileCount; ++TileIndex)
+                        {
+                            renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
+                            if (Cell)
+                            {
+                                glyph_hash TileHash = ComputeHashForTileIndex(RunHash, TileIndex);
+                                glyph_state Entry = FindGlyphEntryByHash(Terminal->GlyphTable, TileHash);
+                                if (Entry.FilledState != GlyphState_Rasterized)
+                                {
+                                    if (!Prepped)
+                                    {
+                                        PrepareTilesForTransfer(&Terminal->GlyphGen, &Terminal->Renderer, UTF16Count, UTF16Buffer, GlyphDim);
+                                        Prepped = 1;
+                                    }
+                                    
+                                    TransferTile(&Terminal->GlyphGen, &Terminal->Renderer, TileIndex, Entry.GPUIndex);
+                                    UpdateGlyphCacheEntry(Terminal->GlyphTable, Entry.ID, GlyphState_Rasterized, Entry.DimX, Entry.DimY);
+                                }
+                                
+                                glyph_props Props = Cursor->Props;
+                                if (Terminal->DebugHighlighting)
+                                {
+                                    Props.Background = Segment ? 0x0008080 : 0x00000080;
+                                    Segment = !Segment;
+                                }
+                                SetCellDirect(Entry.GPUIndex, Props, Cell);
+                            }
+                            
+                            AdvanceColumn(Terminal, &Cursor->At);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range Range,
                                 cursor_state *Cursor, int ContainsComplexChars)
 {
@@ -576,9 +747,9 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
                         (Range.Data[0] != '\x1b'));
 
 
-            // NOTE(casey): Pass the range between the escape codes to Uniscribe
+            // NOTE(casey): Pass the range between the escape codes to KB
             SubRange.Count = Range.AbsoluteP - SubRange.AbsoluteP;
-            ParseWithUniscribe(Terminal, SubRange, Cursor);
+            ParseWithKB(Terminal, SubRange, Cursor);
         }
         else
         {

@@ -52,6 +52,13 @@ typedef struct
 
 typedef struct
 {
+    kbts_break_state BreakState;
+    DWORD SegP[1026]; // Array for segments (similar to Uniscribe version)
+    uint32_t SegmentCount;
+} kb_partitioner;
+
+typedef struct
+{
     size_t FirstP;
     size_t OnePastLastP;
     uint32_t ContainsComplexChars;
@@ -70,6 +77,7 @@ typedef struct
     terminal_buffer ScreenBuffer;
     source_buffer ScrollBackBuffer;
     example_partitioner Partitioner;
+    kb_partitioner KBPartitioner;
 
     DWORD PipeSize;
 
