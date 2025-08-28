@@ -35,20 +35,6 @@ typedef struct
     glyph_props Props;
 } cursor_state;
 
-typedef struct
-{
-    // TODO(casey): Get rid of Uniscribe so this garbage doesn't have to happen
-
-    SCRIPT_DIGITSUBSTITUTE UniDigiSub;
-    SCRIPT_CONTROL UniControl;
-    SCRIPT_STATE UniState;
-    SCRIPT_CACHE UniCache;
-
-    wchar_t Expansion[1024];
-    SCRIPT_ITEM Items[1024];
-    SCRIPT_LOGATTR Log[1024];
-    DWORD SegP[1026];
-} example_partitioner;
 
 typedef struct
 {
@@ -76,7 +62,6 @@ typedef struct
     glyph_table *GlyphTable;
     terminal_buffer ScreenBuffer;
     source_buffer ScrollBackBuffer;
-    example_partitioner Partitioner;
     kb_partitioner KBPartitioner;
 
     DWORD PipeSize;

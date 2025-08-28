@@ -14,7 +14,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <intrin.h>
-#include <usp10.h>
 #include <strsafe.h>
 
 #define KBTS_STATIC
@@ -44,7 +43,6 @@
 #pragma comment (lib, "kernel32")
 #pragma comment (lib, "user32")
 #pragma comment (lib, "gdi32")
-#pragma comment (lib, "usp10")
 #pragma comment (lib, "dwrite")
 #pragma comment (lib, "d2d1")
 #pragma comment (lib, "mincore")
