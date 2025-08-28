@@ -27,4 +27,8 @@ struct glyph_generator
     struct IDWriteFactory *DWriteFactory;
     struct IDWriteFontFace *FontFace;
     struct IDWriteTextFormat *TextFormat;
+    
+    // NOTE: For kb_text_shape integration:
+    char FontFilePath[260];    // MAX_PATH - Store resolved font file path
+    int HasFontFile;           // Flag indicating if font file path is available
 };

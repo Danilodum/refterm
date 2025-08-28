@@ -231,9 +231,14 @@ static void SetD3D11GlyphTransferDim(d3d11_renderer *Renderer, uint32_t Width, u
             ID3D11Device_CreateShaderResourceView(Renderer->Device, (ID3D11Resource *)Renderer->GlyphTransfer, 0, &Renderer->GlyphTransferView);
             ID3D11Texture2D_QueryInterface(Renderer->GlyphTransfer, &IID_IDXGISurface, (void **)&Renderer->GlyphTransferSurface);
 
-            D2DAcquire(Renderer->GlyphTransferSurface,
-                       &Renderer->DWriteRenderTarget,
-                       &Renderer->DWriteFillBrush);
+            int D2DSuccess = D2DAcquire(Renderer->GlyphTransferSurface,
+                                        &Renderer->DWriteRenderTarget,
+                                        &Renderer->DWriteFillBrush);
+            if(!D2DSuccess)
+            {
+                DebugLog("D2DAcquire failed - DWrite rendering will not work");
+                Assert(!"D2DAcquire failed");
+            }
         }
     }
 }

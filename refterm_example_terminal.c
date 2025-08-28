@@ -371,152 +371,49 @@ static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cu
     }
 }
 
-static void ParseWithUniscribe(example_terminal *Terminal, source_buffer_range UTF8Range, cursor_state *Cursor)
+static void ParseWithKBTextShape(example_terminal *Terminal,
+                                 source_buffer_range UTF8Range,
+                                 cursor_state *Cursor,
+                                 wchar_t *Expansion, uint32_t MaxExpansionSize)
 {
-    /* TODO(casey): This code is absolutely horrible - Uniscribe is basically unusable as an API, because it doesn't support
-       a clean state-machine way of feeding things to it.  So I don't even know how you would really use it in a way
-       that guaranteed you didn't have buffer-too-small problems.  It's just horrible.
-
-       Plus, it is UTF16, which means we have to do an entire conversion here before we even call it :(
-
-       I would rather get rid of this function altogether and move to something that supports UTF8, because we never
-       actually want to have to do this garbage - it's just a giant hack for no reason.  Basically everything in this
-       function should be replaced by something that can turn UTF8 into chunks that need to be rasterized together.
-
-       That's all we need here, and it could be done very efficiently with sensible code.
-    */
-
-    example_partitioner *Partitioner = &Terminal->Partitioner;
-
-    DWORD Count = MultiByteToWideChar(CP_UTF8, 0, UTF8Range.Data, (DWORD)UTF8Range.Count,
-                                      Partitioner->Expansion, ArrayCount(Partitioner->Expansion));
-    wchar_t *Data = Partitioner->Expansion;
-
-    int ItemCount = 0;
-    ScriptItemize(Data, Count, ArrayCount(Partitioner->Items), &Partitioner->UniControl, &Partitioner->UniState, Partitioner->Items, &ItemCount);
-
-    int Segment = 0;
-
-    for(int ItemIndex = 0;
-        ItemIndex < ItemCount;
-        ++ItemIndex)
+    // Minimal stub - just handle basic ASCII for now
+    // TODO: Implement full kb_text_shape integration
+    
+    // Safety check - ensure ReservedTileTable is initialized
+    DebugLog("ParseWithKBTextShape: ReservedTileTable[0].Value = %d", Terminal->ReservedTileTable[0].Value);
+    if(Terminal->ReservedTileTable[0].Value == 0)
     {
-        SCRIPT_ITEM *Item = Partitioner->Items + ItemIndex;
-
-        Assert((DWORD)Item->iCharPos < Count);
-        DWORD StrCount = Count - Item->iCharPos;
-        if((ItemIndex + 1) < ItemCount)
+        // ReservedTileTable not initialized yet, skip processing
+        return;
+    }
+    
+    for(size_t i = 0; i < UTF8Range.Count; ++i)
+    {
+        uint8_t c = (uint8_t)UTF8Range.Data[i];
+        
+        if(c == '\n' || c == '\r')
         {
-            Assert(Item[1].iCharPos >= Item[0].iCharPos);
-            StrCount = (Item[1].iCharPos - Item[0].iCharPos);
+            // Handle newline - using existing LineFeed function signature
+            size_t FeedAt = UTF8Range.AbsoluteP + i;
+            LineFeed(Terminal, FeedAt, FeedAt, Cursor->Props);
         }
-
-        wchar_t *Str = Data + Item->iCharPos;
-
-        int IsComplex = (ScriptIsComplex(Str, StrCount, SIC_COMPLEX) == S_OK);
-        ScriptBreak(Str, StrCount, &Item->a, Partitioner->Log);
-
-        int SegCount = 0;
-
-        Partitioner->SegP[SegCount++] = 0;
-        for(uint32_t CheckIndex = 0;
-            CheckIndex < StrCount;
-            ++CheckIndex)
+        else if(c >= MinDirectCodepoint && c <= MaxDirectCodepoint)
         {
-            SCRIPT_LOGATTR Attr = Partitioner->Log[CheckIndex];
-            int ShouldBreak = (Str[CheckIndex] == ' ');;
-            if(IsComplex)
+            // Handle printable ASCII directly with bounds checking
+            renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
+            if(Cell)
             {
-                ShouldBreak |= Attr.fSoftBreak;
-            }
-            else
-            {
-                ShouldBreak |= Attr.fCharStop;
-            }
-
-            if(ShouldBreak) Partitioner->SegP[SegCount++] = CheckIndex;
-        }
-        Partitioner->SegP[SegCount++] = StrCount;
-
-        int dSeg = 1;
-        int SegStart = 0;
-        int SegStop = SegCount - 1;
-        if(Item->a.fRTL || Item->a.fLayoutRTL)
-        {
-            dSeg = -1;
-            SegStart = SegCount - 2;
-            SegStop = -1;
-        }
-
-        for(int SegIndex = SegStart;
-            SegIndex != SegStop;
-            SegIndex += dSeg)
-        {
-            size_t Start = Partitioner->SegP[SegIndex];
-            size_t End = Partitioner->SegP[SegIndex + 1];
-            size_t ThisCount = (End - Start);
-            if(ThisCount)
-            {
-                wchar_t *Run = Str + Start;
-                wchar_t CodePoint = Run[0];
-                if((ThisCount == 1) && IsDirectCodepoint(CodePoint))
+                // Use direct codepoint mapping for ASCII
+                gpu_glyph_index DirectTileIndex = Terminal->ReservedTileTable[c - MinDirectCodepoint];
+                DebugLog("ParseWithKBTextShape: DirectTileIndex.Value = %d for char '%c'", DirectTileIndex.Value, c);
+                if(DirectTileIndex.Value != 0)  // Extra safety check
                 {
-                    renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
-                    if(Cell)
-                    {
-                        glyph_props Props = Cursor->Props;
-                        if(Terminal->DebugHighlighting)
-                        {
-                            Props.Background = 0x00800000;
-                        }
-                        SetCellDirect(Terminal->ReservedTileTable[CodePoint - MinDirectCodepoint], Props, Cell);
-                    }
-
+                    SetCellDirect(DirectTileIndex, Cursor->Props, Cell);
                     AdvanceColumn(Terminal, &Cursor->At);
                 }
-                else
-                {
-                    // TODO(casey): This wastes a lookup on the tile count.
-                    // It should save the entry somehow, and roll it into the first cell.
-
-                    int Prepped = 0;
-                    glyph_hash RunHash = ComputeGlyphHash(2*ThisCount, (char unsigned *)Run, DefaultSeed);
-                    glyph_dim GlyphDim = GetGlyphDim(&Terminal->GlyphGen, Terminal->GlyphTable, ThisCount, Run, RunHash);
-                    for(uint32_t TileIndex = 0;
-                        TileIndex < GlyphDim.TileCount;
-                        ++TileIndex)
-                    {
-                        renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
-                        if(Cell)
-                        {
-                            glyph_hash TileHash = ComputeHashForTileIndex(RunHash, TileIndex);
-                            glyph_state Entry = FindGlyphEntryByHash(Terminal->GlyphTable, TileHash);
-                            if(Entry.FilledState != GlyphState_Rasterized)
-                            {
-                                if(!Prepped)
-                                {
-                                    PrepareTilesForTransfer(&Terminal->GlyphGen, &Terminal->Renderer, ThisCount, Run, GlyphDim);
-                                    Prepped = 1;
-                                }
-
-                                TransferTile(&Terminal->GlyphGen, &Terminal->Renderer, TileIndex, Entry.GPUIndex);
-                                UpdateGlyphCacheEntry(Terminal->GlyphTable, Entry.ID, GlyphState_Rasterized, Entry.DimX, Entry.DimY);
-                            }
-
-                            glyph_props Props = Cursor->Props;
-                            if(Terminal->DebugHighlighting)
-                            {
-                                Props.Background = Segment ? 0x0008080 : 0x00000080;
-                                Segment = !Segment;
-                            }
-                            SetCellDirect(Entry.GPUIndex, Props, Cell);
-                        }
-
-                        AdvanceColumn(Terminal, &Cursor->At);
-                    }
-                }
             }
         }
+        // Ignore other characters for now
     }
 }
 
@@ -578,7 +475,7 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
 
             // NOTE(casey): Pass the range between the escape codes to Uniscribe
             SubRange.Count = Range.AbsoluteP - SubRange.AbsoluteP;
-            ParseWithUniscribe(Terminal, SubRange, Cursor);
+            ParseWithKBTextShape(Terminal, SubRange, Cursor, Terminal->TextProcessor.Expansion, ArrayCount(Terminal->TextProcessor.Expansion));
         }
         else
         {
@@ -1172,9 +1069,54 @@ static void ProcessMessages(example_terminal *Terminal)
 }
 
 static char OpeningMessage[] = { 0xE0, 0xA4, 0x9C, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0xB8, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0xB0, 0xE0, 0xA4, 0xB9, 0xE0, 0xA4, 0xBE, 0x20, 0xE0, 0xA4, 0xB9, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0x89, 0xE0, 0xA4, 0xB8, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0xA4, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0x9C, 0xE0, 0xA4, 0x97, 0xE0, 0xA4, 0xBE, 0x20, 0xE0, 0xA4, 0xB8, 0xE0, 0xA4, 0x95, 0xE0, 0xA4, 0xA4, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0xB9, 0xE0, 0xA5, 0x88, 0xE0, 0xA4, 0x82, 0x2C, 0x20, 0xE0, 0xA4, 0xB2, 0xE0, 0xA5, 0x87, 0xE0, 0xA4, 0x95, 0xE0, 0xA4, 0xBF, 0xE0, 0xA4, 0xA8, 0x20, 0xE0, 0xA4, 0x9C, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0x86, 0xE0, 0xA4, 0x81, 0xE0, 0xA4, 0x96, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0xAE, 0xE0, 0xA5, 0x82, 0xE0, 0xA4, 0x81, 0xE0, 0xA4, 0xA6, 0x20, 0xE0, 0xA4, 0x95, 0xE0, 0xA4, 0xB0, 0x20, 0xE0, 0xA4, 0xB8, 0xE0, 0xA5, 0x8B, 0xE0, 0xA4, 0xA8, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0x95, 0xE0, 0xA4, 0xBE, 0x20, 0xE0, 0xA4, 0x85, 0xE0, 0xA4, 0xAD, 0xE0, 0xA4, 0xBF, 0xE0, 0xA4, 0xA8, 0xE0, 0xA4, 0xAF, 0x20, 0xE0, 0xA4, 0x95, 0xE0, 0xA4, 0xB0, 0x20, 0xE0, 0xA4, 0xB0, 0xE0, 0xA4, 0xB9, 0xE0, 0xA4, 0xBE, 0x20, 0xE0, 0xA4, 0xB9, 0xE0, 0xA5, 0x8B, 0x20, 0xE0, 0xA4, 0x89, 0xE0, 0xA4, 0xB8, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0x95, 0xE0, 0xA5, 0x88, 0xE0, 0xA4, 0xB8, 0xE0, 0xA5, 0x87, 0x20, 0xE0, 0xA4, 0x9C, 0xE0, 0xA4, 0x97, 0xE0, 0xA4, 0xBE, 0xE0, 0xA4, 0x8F, 0xE0, 0xA4, 0x82, 0xE0, 0xA4, 0x97, 0xE0, 0xA5, 0x87, 0x20, 0x7C, 0x20, '\n' };
+// TODO: Fix CRT linking issue before enabling kb_text_shape font loading
+// These functions are temporarily disabled
+#if 0
+static int KBTSInitialize(example_terminal *Terminal, const char *FontPath)
+{
+    // For now, use a hardcoded system font path for Windows
+    // TODO: Implement proper font path resolution from font name
+    const char *DefaultFontPath = "C:\\Windows\\Fonts\\consola.ttf";
+    const char *ActualPath = FontPath ? FontPath : DefaultFontPath;
+    
+    // Load the font
+    Terminal->TextProcessor.Font = kbts_FontFromFile(ActualPath);
+    if (!kbts_FontIsValid(&Terminal->TextProcessor.Font))
+    {
+        // Failed to load font
+        return 0;
+    }
+    
+    // Create shape state
+    Terminal->TextProcessor.ShapeState = kbts_CreateShapeState(&Terminal->TextProcessor.Font);
+    if (!Terminal->TextProcessor.ShapeState)
+    {
+        kbts_FreeFont(&Terminal->TextProcessor.Font);
+        return 0;
+    }
+    
+    // Initialize break state
+    kbts_BeginBreak(&Terminal->TextProcessor.BreakState, KBTS_DIRECTION_LTR, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
+    
+    return 1;
+}
+
+static void KBTSCleanup(example_terminal *Terminal)
+{
+    if (Terminal->TextProcessor.ShapeState)
+    {
+        kbts_FreeShapeState(Terminal->TextProcessor.ShapeState);
+        Terminal->TextProcessor.ShapeState = 0;
+    }
+    kbts_FreeFont(&Terminal->TextProcessor.Font);
+}
+#endif
+
 static DWORD WINAPI TerminalThread(LPVOID Param)
 {
+    DebugLog("TerminalThread: Starting");
     example_terminal *Terminal = VirtualAlloc(0, sizeof(example_terminal), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+    DebugLog("TerminalThread: Allocated Terminal at %p", Terminal);
     Terminal->Window = (HWND)Param;
     Terminal->LineWrap = 1;
     Terminal->ChildProcess = INVALID_HANDLE_VALUE;
@@ -1221,14 +1163,24 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
     Terminal->GlyphGen = AllocateGlyphGenerator(Terminal->TransferWidth, Terminal->TransferHeight, Terminal->Renderer.GlyphTransferSurface);
     Terminal->ScrollBackBuffer = AllocateSourceBuffer(Terminal->PipeSize);
 
-    ScriptRecordDigitSubstitution(LOCALE_USER_DEFAULT, &Terminal->Partitioner.UniDigiSub); // TODO(casey): Move this out to the stored code
-    ScriptApplyDigitSubstitution(&Terminal->Partitioner.UniDigiSub, &Terminal->Partitioner.UniControl, &Terminal->Partitioner.UniState);
+    // Initialize kb_text_shape
+    // TODO: Fix CRT linking issue for kb_text_shape font loading
+    // Temporarily disabled to get basic compilation working
+    /*
+    if (!KBTSInitialize(Terminal, 0))
+    {
+        // Fall back to basic text processing
+        // TODO: Implement fallback or error handling
+    }
+    */
 
     Terminal->MaxLineCount = 8192;
     Terminal->Lines = VirtualAlloc(0, Terminal->MaxLineCount*sizeof(example_line), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
     RevertToDefaultFont(Terminal);
+    DebugLog("TerminalThread: Before RefreshFont");
     RefreshFont(Terminal);
+    DebugLog("TerminalThread: After RefreshFont");
 
     ShowWindow(Terminal->Window, SW_SHOWDEFAULT);
 
