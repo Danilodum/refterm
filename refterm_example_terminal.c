@@ -542,6 +542,10 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     uint32_t CurrentPosition = 0;
     
     // Feed all codepoints to the break state
+    // Track space positions for additional break opportunities (matches original ScriptBreak behavior)
+    uint32_t SpacePositions[1024];
+    uint32_t SpaceCount = 0;
+    
     while (StringAt < UTF8Range.Count)
     {
         kbts_decode Decode = kbts_DecodeUtf8(UTF8Range.Data + StringAt, UTF8Range.Count - StringAt);
@@ -549,6 +553,12 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         
         if (Decode.Valid)
         {
+            // Track space character positions for additional break opportunities
+            if (Decode.Codepoint == ' ' && SpaceCount < ArrayCount(SpacePositions))
+            {
+                SpacePositions[SpaceCount++] = CurrentPosition;
+            }
+            
             int EndOfText = (StringAt >= UTF8Range.Count);
             kbts_BreakAddCodepoint(&KBPartitioner->BreakState, Decode.Codepoint, 1, EndOfText);
             CurrentPosition++;
@@ -571,6 +581,9 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     int HasRTL = 0;
     kbts_direction CurrentDirection = KBTS_DIRECTION_LTR;
     
+    // Track script information during break processing
+    kbts_script CurrentScript = KBTS_SCRIPT_UNKNOWN;
+    
     while (kbts_Break(&KBPartitioner->BreakState, &Break))
     {
         // Detect RTL text using kb break flags
@@ -583,9 +596,44 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             }
         }
         
-        // For text shaping, we're interested in script and direction breaks
-        if ((Break.Flags & (KBTS_BREAK_FLAG_SCRIPT | KBTS_BREAK_FLAG_DIRECTION | KBTS_BREAK_FLAG_WORD)) && 
-            Break.Position > LastBreakPosition)
+        // Update script information when encountering script breaks
+        if (Break.Flags & KBTS_BREAK_FLAG_SCRIPT)
+        {
+            CurrentScript = Break.Script;
+        }
+        
+        // Implement different break strategies based on script complexity and break type
+        int ShouldBreak = 0;
+        
+        // Always honor hard line breaks (paragraph breaks)
+        if (Break.Flags & KBTS_BREAK_FLAG_LINE_HARD)
+        {
+            ShouldBreak = 1;
+        }
+        // For complex scripts: Use soft line breaks for segmentation (matches Uniscribe fSoftBreak)
+        else if ((CurrentScript != KBTS_SCRIPT_UNKNOWN && kbts_ScriptIsComplex(CurrentScript)) || HasRTL)
+        {
+            if (Break.Flags & KBTS_BREAK_FLAG_LINE_SOFT)
+            {
+                ShouldBreak = 1;
+            }
+        }
+        // For simple scripts: Use character boundaries for segmentation (matches Uniscribe fCharStop)
+        else
+        {
+            if (Break.Flags & KBTS_BREAK_FLAG_GRAPHEME)
+            {
+                ShouldBreak = 1;
+            }
+        }
+        
+        // Also break on script and direction changes for text shaping
+        if (Break.Flags & (KBTS_BREAK_FLAG_SCRIPT | KBTS_BREAK_FLAG_DIRECTION | KBTS_BREAK_FLAG_WORD))
+        {
+            ShouldBreak = 1;
+        }
+        
+        if (ShouldBreak && Break.Position > LastBreakPosition)
         {
             // Bounds checking: Prevent buffer overflow of the SegP[1026] array
             if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
@@ -603,6 +651,44 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         // In production code, you might want to log this error or handle it differently
         kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
         return;
+    }
+    
+    // Add space character positions as additional break points (matches original ScriptBreak behavior)
+    for (uint32_t SpaceIndex = 0; SpaceIndex < SpaceCount; ++SpaceIndex)
+    {
+        uint32_t SpacePos = SpacePositions[SpaceIndex];
+        if (SpacePos > LastBreakPosition)
+        {
+            // Check if this space position is not already in our break list
+            int AlreadyExists = 0;
+            for (uint32_t CheckIndex = 0; CheckIndex < KBPartitioner->SegmentCount; ++CheckIndex)
+            {
+                if (KBPartitioner->SegP[CheckIndex] == SpacePos)
+                {
+                    AlreadyExists = 1;
+                    break;
+                }
+            }
+            
+            if (!AlreadyExists && KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
+            {
+                KBPartitioner->SegP[KBPartitioner->SegmentCount++] = SpacePos;
+            }
+        }
+    }
+    
+    // Sort the segment positions to ensure proper order
+    // Simple insertion sort for the segment positions
+    for (uint32_t i = 1; i < KBPartitioner->SegmentCount; ++i)
+    {
+        uint32_t key = KBPartitioner->SegP[i];
+        int j = i - 1;
+        while (j >= 0 && KBPartitioner->SegP[j] > key)
+        {
+            KBPartitioner->SegP[j + 1] = KBPartitioner->SegP[j];
+            j--;
+        }
+        KBPartitioner->SegP[j + 1] = key;
     }
     
     // Ensure we end with the full string length
@@ -646,13 +732,15 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             // and apply different break strategies for complex vs simple scripts
             int IsComplex = 0;
             
-            // We need to check the script for this segment to determine complexity
-            // For now, we'll use a simple heuristic: if we have RTL text or non-ASCII characters,
-            // treat it as complex. In a full implementation, you'd want to track script information
-            // from the break processing above.
-            if (HasRTL || SegmentLength > 1)
+            // Use proper script complexity detection instead of heuristic
+            if (CurrentScript != KBTS_SCRIPT_UNKNOWN)
             {
-                IsComplex = 1;
+                IsComplex = kbts_ScriptIsComplex(CurrentScript);
+            }
+            else
+            {
+                // Fallback for unknown scripts - check if RTL or multi-codepoint
+                IsComplex = (HasRTL || SegmentLength > 1);
             }
             
             // Convert segment positions back to UTF-8 byte offsets

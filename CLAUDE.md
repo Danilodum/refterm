@@ -1,0 +1,1 @@
+- strictly adhere to our todolist structure!!!! use subagents!!!
