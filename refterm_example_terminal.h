@@ -37,18 +37,14 @@ typedef struct
 
 typedef struct
 {
-    // TODO(casey): Get rid of Uniscribe so this garbage doesn't have to happen
-
-    SCRIPT_DIGITSUBSTITUTE UniDigiSub;
-    SCRIPT_CONTROL UniControl;
-    SCRIPT_STATE UniState;
-    SCRIPT_CACHE UniCache;
-
-    wchar_t Expansion[1024];
-    SCRIPT_ITEM Items[1024];
-    SCRIPT_LOGATTR Log[1024];
-    DWORD SegP[1026];
-} example_partitioner;
+    // kb_text_shape structures to replace Uniscribe
+    kbts_font Font;
+    kbts_shape_state *ShapeState;  
+    kbts_break_state BreakState;
+    
+    // Temporary buffers for text processing
+    wchar_t Expansion[1024];  // Keep for now during transition
+} example_text_processor;
 
 typedef struct
 {
@@ -69,7 +65,7 @@ typedef struct
     glyph_table *GlyphTable;
     terminal_buffer ScreenBuffer;
     source_buffer ScrollBackBuffer;
-    example_partitioner Partitioner;
+    example_text_processor TextProcessor;
 
     DWORD PipeSize;
 

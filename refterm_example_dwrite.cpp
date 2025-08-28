@@ -25,19 +25,23 @@ extern "C" int D2DAcquire(IDXGISurface *GlyphTransferSurface,
     ID2D1Factory *Factory = 0;
     D2D1_FACTORY_OPTIONS Options = {};
     Options.debugLevel = D2D1_DEBUG_LEVEL_ERROR;
-    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &Options, (void**)&Factory);
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &Options, (void**)&Factory);
+    DebugLog("D2DAcquire: D2D1CreateFactory hr=0x%08x, Factory=%p", hr, Factory);
     if(Factory)
     {
-        Factory->CreateDxgiSurfaceRenderTarget(GlyphTransferSurface, &Props, DWriteRenderTarget);
+        hr = Factory->CreateDxgiSurfaceRenderTarget(GlyphTransferSurface, &Props, DWriteRenderTarget);
+        DebugLog("D2DAcquire: CreateDxgiSurfaceRenderTarget hr=0x%08x, RenderTarget=%p", hr, *DWriteRenderTarget);
         if(*DWriteRenderTarget)
         {
-            (*DWriteRenderTarget)->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), DWriteFillBrush);
+            hr = (*DWriteRenderTarget)->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), DWriteFillBrush);
+            DebugLog("D2DAcquire: CreateSolidColorBrush hr=0x%08x, Brush=%p", hr, *DWriteFillBrush);
             Result = (*DWriteFillBrush != 0);
         }
 
         Factory->Release();
     }
 
+    DebugLog("D2DAcquire: Final Result=%d", Result);
     return Result;
 }
 

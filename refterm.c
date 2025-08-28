@@ -5,7 +5,21 @@
 #define COBJMACROS
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
-#define _NO_CRT_STDIO_INLINE
+// kb_text_shape in NO_CRT mode
+#define NULL 0
+
+// Forward declare our custom memset before kb_text_shape uses it
+void *memset(void *DestInit, int Source, size_t Size);
+
+// Define byteswap and popcount macros to avoid intrinsic conflicts  
+#define kbts_ByteSwap16(X) ((((X) & 0xFF00) >> 8) | (((X) & 0x00FF) << 8))
+#define kbts_ByteSwap32(X) ((((X) & 0xFF000000) >> 24) | (((X) & 0x00FF0000) >> 8) | (((X) & 0x0000FF00) << 8) | (((X) & 0x000000FF) << 24))
+#define kbts_PopCount32(X) __popcnt(X)
+
+#define KB_TEXT_SHAPE_NO_CRT
+#define KBTS_MEMSET memset  // Use refterm's custom memset
+#define KB_TEXT_SHAPE_IMPLEMENTATION
+#include "kb_text_shape.h"
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -45,6 +59,7 @@
 #pragma comment (lib, "dwrite")
 #pragma comment (lib, "d2d1")
 #pragma comment (lib, "mincore")
+// NOTE: kb_text_shape now runs in NO_CRT mode
 
 DWORD RenderThreadID = 0;
 
@@ -127,12 +142,17 @@ static HWND CreateOutputWindow()
 
 void WinMainCRTStartup()
 {
+    DebugLog("WinMainCRTStartup: Starting");
     PreventWindowsDPIScaling();
+    DebugLog("WinMainCRTStartup: After PreventWindowsDPIScaling");
 
     HWND Window = CreateOutputWindow();
+    DebugLog("WinMainCRTStartup: After CreateOutputWindow, Window = %p", Window);
     Assert(IsWindow(Window));
 
+    DebugLog("WinMainCRTStartup: Before CreateThread");
     CreateThread(0, 0, TerminalThread, Window, 0, &RenderThreadID);
+    DebugLog("WinMainCRTStartup: After CreateThread, ThreadID = %lu", RenderThreadID);
 
     for(;;)
     {
