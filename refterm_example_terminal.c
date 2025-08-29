@@ -562,11 +562,11 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     // RTL text needs to be processed from right-to-left, so we reverse the segment iteration
     int dSeg = 1;
     uint32_t SegStart = 0;
-    uint32_t SegStop = KBPartitioner->SegmentCount - 1;
+    uint32_t SegStop = KBPartitioner->SegmentCount > 0 ? KBPartitioner->SegmentCount - 1 : 0;
     
-    if (HasRTL && CurrentDirection == KBTS_DIRECTION_RTL)
+    if (HasRTL && CurrentDirection == KBTS_DIRECTION_RTL && KBPartitioner->SegmentCount >= 2)
     {
-        // Reverse processing order for RTL text
+        // Reverse processing order for RTL text (only if we have at least 2 segments)
         dSeg = -1;
         SegStart = KBPartitioner->SegmentCount - 2;
         SegStop = UINT32_MAX; // Will wrap around, effectively -1 for uint32_t comparison
@@ -574,6 +574,12 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     
     for (uint32_t SegIndex = SegStart; SegIndex != SegStop; SegIndex += dSeg)
     {
+        // Bounds checking to prevent buffer overflow
+        if (SegIndex >= 1026 || (SegIndex + 1) >= 1026)
+        {
+            break; // Prevent out-of-bounds access
+        }
+        
         uint32_t Start = KBPartitioner->SegP[SegIndex];
         uint32_t End = KBPartitioner->SegP[SegIndex + 1];
         uint32_t SegmentLength = End - Start;
@@ -1373,6 +1379,9 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
     Terminal->FastPipeReady = CreateEventW(0, TRUE, FALSE, 0);
     Terminal->FastPipeTrigger.hEvent = Terminal->FastPipeReady;
     Terminal->PipeSize = 16*1024*1024;
+    
+    // Initialize KBPartitioner to prevent undefined behavior
+    ZeroMemory(&Terminal->KBPartitioner, sizeof(kb_partitioner));
 
     ClearCursor(Terminal, &Terminal->RunningCursor);
 
