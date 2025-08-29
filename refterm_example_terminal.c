@@ -370,13 +370,9 @@ static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cu
 }
 
 
-// Forward declaration for debug output
 static void AppendOutput(example_terminal *Terminal, char *Format, ...);
 
-// Debug log file handle (shared across calls)
 static HANDLE g_hDebugLog = INVALID_HANDLE_VALUE;
-
-// Helper function to write to debug log file
 static void WriteDebugLog(const char *format, ...)
 {
     if (g_hDebugLog != INVALID_HANDLE_VALUE)
@@ -389,7 +385,6 @@ static void WriteDebugLog(const char *format, ...)
         
         DWORD written;
         WriteFile(g_hDebugLog, buffer, len, &written, NULL);
-        // Flush to ensure data is written immediately
         FlushFileBuffers(g_hDebugLog);
     }
 }
@@ -592,8 +587,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         {
             AppendOutput(Terminal, "[ERROR] Break state is invalid after processing - restarting\n");
         }
-        // Handle invalid state - for now, we'll restart with a fresh state
-        // In production code, you might want to log this error or handle it differently
         kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
         return;
     }
@@ -675,10 +668,9 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     
     if (HasRTL && CurrentDirection == KBTS_DIRECTION_RTL && KBPartitioner->SegmentCount >= 2)
     {
-        // Reverse processing order for RTL text (only if we have at least 2 segments)
         dSeg = -1;
         SegStart = KBPartitioner->SegmentCount - 2;
-        SegStop = UINT32_MAX; // Will wrap around, effectively -1 for uint32_t comparison
+        SegStop = UINT32_MAX;
         
         if (Terminal->DebugHighlighting)
         {
@@ -700,7 +692,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             {
                 AppendOutput(Terminal, "[SEG] ERROR: Segment bounds exceeded at index %u - stopping\n", SegIndex);
             }
-            break; // Prevent out-of-bounds access
+            break;
         }
         
         if (Terminal->DebugHighlighting)
