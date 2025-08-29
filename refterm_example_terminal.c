@@ -422,7 +422,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         }
     }
     
-    // Initialize KB break state
     kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
     
     if (Terminal->DebugHighlighting)
@@ -431,11 +430,9 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         AppendOutput(Terminal, "[KB_INIT] Processing UTF-8 range: %zu bytes\n", UTF8Range.Count);
     }
     
-    // Process UTF-8 string directly with KB library
     size_t StringAt = 0;
     uint32_t CurrentPosition = 0;
     
-    // Feed all codepoints to the break state
     // Track space positions for additional break opportunities (matches original ScriptBreak behavior)
     uint32_t SpacePositions[1024];
     uint32_t SpaceCount = 0;
@@ -460,7 +457,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                              Decode.Codepoint, CurrentPosition, Decode.SourceCharactersConsumed);
             }
             
-            // Track space character positions for additional break opportunities
             if (Decode.Codepoint == ' ' && SpaceCount < ArrayCount(SpacePositions))
             {
                 SpacePositions[SpaceCount++] = CurrentPosition;
@@ -485,7 +481,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         AppendOutput(Terminal, "[UTF8] Completed decoding: %u codepoints, %u spaces found\n", CurrentPosition, SpaceCount);
     }
     
-    // Extract breaks and build segments
     KBPartitioner->SegmentCount = 0;
     
     // Bounds checking: Ensure we don't overflow the SegP array
@@ -507,11 +502,9 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     uint32_t LastBreakPosition = 0;
     kbts_break Break;
     
-    // Variables for RTL detection and direction state tracking
     int HasRTL = 0;
     kbts_direction CurrentDirection = KBTS_DIRECTION_LTR;
     
-    // Track script information during break processing
     kbts_script CurrentScript = KBTS_SCRIPT_DONT_KNOW;
     
     if (Terminal->DebugHighlighting)
@@ -559,15 +552,12 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             }
         }
         
-        // Implement different break strategies based on script complexity and break type
         int ShouldBreak = 0;
         
-        // Always honor hard line breaks (paragraph breaks)
         if (Break.Flags & KBTS_BREAK_FLAG_LINE_HARD)
         {
             ShouldBreak = 1;
         }
-        // For complex scripts: Use soft line breaks for segmentation
         else if ((CurrentScript != KBTS_SCRIPT_DONT_KNOW && kbts_ScriptIsComplex(CurrentScript)) || HasRTL)
         {
             if (Break.Flags & KBTS_BREAK_FLAG_LINE_SOFT)
@@ -575,7 +565,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                 ShouldBreak = 1;
             }
         }
-        // For simple scripts: Use character boundaries for segmentation
         else
         {
             if (Break.Flags & KBTS_BREAK_FLAG_GRAPHEME)
@@ -592,7 +581,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         
         if (ShouldBreak && Break.Position > LastBreakPosition)
         {
-            // Bounds checking: Prevent buffer overflow of the SegP[1026] array
             if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
             {
                 KBPartitioner->SegP[KBPartitioner->SegmentCount++] = Break.Position;
@@ -666,8 +654,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         }
     }
     
-    // Sort the segment positions to ensure proper order
-    // Simple insertion sort for the segment positions
     for (uint32_t i = 1; i < KBPartitioner->SegmentCount; ++i)
     {
         uint32_t key = KBPartitioner->SegP[i];
@@ -684,7 +670,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     if (KBPartitioner->SegmentCount == 0 || 
         (KBPartitioner->SegmentCount > 0 && KBPartitioner->SegP[KBPartitioner->SegmentCount - 1] != CurrentPosition))
     {
-        // Bounds checking before adding final position
         if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
         {
             KBPartitioner->SegP[KBPartitioner->SegmentCount++] = CurrentPosition;
@@ -700,7 +685,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         }
     }
     
-    // Process segments with KB library
     int Segment = 0;
     
     // RTL Support: When RTL is detected, reverse the segment processing order
@@ -731,7 +715,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     
     for (uint32_t SegIndex = SegStart; SegIndex != SegStop; SegIndex += dSeg)
     {
-        // Bounds checking to prevent buffer overflow
         if (SegIndex >= 1026 || (SegIndex + 1) >= 1026)
         {
             if (Terminal->DebugHighlighting)
@@ -768,13 +751,10 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                 IsComplex = (HasRTL || SegmentLength > 1);
             }
             
-            // Convert segment positions back to UTF-8 byte offsets
             size_t UTF8Start = 0;
             size_t UTF8End = 0;
             uint32_t CodepointCount = 0;
             size_t ByteOffset = 0;
-            
-            // Find UTF-8 byte range for this segment
             while (ByteOffset < UTF8Range.Count && CodepointCount <= End)
             {
                 if (CodepointCount == Start)
@@ -816,7 +796,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                 
                 if (IsAllDirect && UTF8SegmentLength == 1)
                 {
-                    // Handle direct codepoint (ASCII)
                     renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
                     if (Cell)
                     {
@@ -831,7 +810,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                 }
                 else
                 {
-                    // Handle complex text - convert to UTF-16 for glyph generation
                     wchar_t UTF16Buffer[1024];
                     DWORD UTF16Count = MultiByteToWideChar(CP_UTF8, 0, UTF8Segment, (DWORD)UTF8SegmentLength, UTF16Buffer, ArrayCount(UTF16Buffer));
                     
