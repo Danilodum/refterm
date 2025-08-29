@@ -3,14 +3,13 @@
 #include <stdio.h>
 #include <stdint.h>
 
-// Mock structures needed for testing
 typedef struct {
     uint32_t Count;
     uint8_t *Data;
 } buffer;
 
 typedef struct {
-    void *BreakState[100]; // Mock break state
+    void *BreakState[100];
     DWORD SegP[1026];
     uint32_t SegmentCount;
 } kb_partitioner;
@@ -23,7 +22,6 @@ typedef struct {
 // Forward declaration
 void ParseWithKB(example_terminal *Terminal, buffer UTF8Range);
 
-// Mock AppendOutput to print to console
 void AppendOutput(example_terminal *Terminal, char *Format, ...)
 {
     va_list args;

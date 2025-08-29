@@ -39,7 +39,7 @@ typedef struct
 typedef struct
 {
     kbts_break_state BreakState;
-    DWORD SegP[1026]; // Array for segments (compatible with original segment structure)
+    DWORD SegP[1026];
     uint32_t SegmentCount;
 } kb_partitioner;
 

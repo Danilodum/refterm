@@ -396,21 +396,10 @@ static void WriteDebugLog(const char *format, ...)
     }
 }
 
-// ParseWithKB: Enhanced version with critical fixes applied
-// 
-// CRITICAL FIXES IMPLEMENTED:
-// 1. RTL Support: Detects RTL text using kb break flags and reverses segment processing order
-// 2. Bounds Checking: Prevents buffer overflow of SegP[1026] array by checking before increments  
-// 3. Error Handling: Validates break state using kbts_BreakStateIsValid() to prevent silent failures
-// 4. Complex Script Detection: Uses script complexity detection for appropriate break strategies
-//
-// This function uses KB library for text shaping and line breaking
-// while maintaining compatibility with the existing rendering pipeline.
 static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Range, cursor_state *Cursor)
 {
     kb_partitioner *KBPartitioner = &Terminal->KBPartitioner;
     
-    // Debug: Create/append to log file when debug mode is on
     if (Terminal->DebugHighlighting && g_hDebugLog == INVALID_HANDLE_VALUE)
     {
         g_hDebugLog = CreateFileA("kb_debug.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, 
@@ -433,7 +422,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     size_t StringAt = 0;
     uint32_t CurrentPosition = 0;
     
-    // Track space positions for additional break opportunities (matches original ScriptBreak behavior)
     uint32_t SpacePositions[1024];
     uint32_t SpaceCount = 0;
     
@@ -483,10 +471,9 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     
     KBPartitioner->SegmentCount = 0;
     
-    // Bounds checking: Ensure we don't overflow the SegP array
     if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
     {
-        KBPartitioner->SegP[KBPartitioner->SegmentCount++] = 0; // Start of first segment
+        KBPartitioner->SegP[KBPartitioner->SegmentCount++] = 0;
         if (Terminal->DebugHighlighting)
         {
             AppendOutput(Terminal, "[BOUNDS] Added segment start at position 0, SegmentCount now %u/%u\n", 
@@ -522,7 +509,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                        BreakCount, Break.Position, Break.Flags);
         }
         
-        // Detect RTL text using kb break flags
         if (Break.Flags & KBTS_BREAK_FLAG_DIRECTION)
         {
             CurrentDirection = Break.Direction;
@@ -541,7 +527,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             }
         }
         
-        // Update script information when encountering script breaks
         if (Break.Flags & KBTS_BREAK_FLAG_SCRIPT)
         {
             CurrentScript = Break.Script;
@@ -573,7 +558,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             }
         }
         
-        // Also break on script and direction changes for text shaping
         if (Break.Flags & (KBTS_BREAK_FLAG_SCRIPT | KBTS_BREAK_FLAG_DIRECTION | KBTS_BREAK_FLAG_WORD))
         {
             ShouldBreak = 1;
@@ -604,7 +588,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                    BreakCount, HasRTL, CurrentScript);
     }
     
-    // Error handling: Check if break state is valid after processing
     if (!kbts_BreakStateIsValid(&KBPartitioner->BreakState))
     {
         if (Terminal->DebugHighlighting)
@@ -627,7 +610,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         uint32_t SpacePos = SpacePositions[SpaceIndex];
         if (SpacePos > LastBreakPosition)
         {
-            // Check if this space position is not already in our break list
             int AlreadyExists = 0;
             for (uint32_t CheckIndex = 0; CheckIndex < KBPartitioner->SegmentCount; ++CheckIndex)
             {
@@ -666,7 +648,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         KBPartitioner->SegP[j + 1] = key;
     }
     
-    // Ensure we end with the full string length
     if (KBPartitioner->SegmentCount == 0 || 
         (KBPartitioner->SegmentCount > 0 && KBPartitioner->SegP[KBPartitioner->SegmentCount - 1] != CurrentPosition))
     {
@@ -780,7 +761,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             {
                 char *UTF8Segment = UTF8Range.Data + UTF8Start;
                 
-                // Check if segment contains only direct codepoints
                 int IsAllDirect = 1;
                 size_t CheckOffset = 0;
                 uint32_t DirectCodepoint = 0;
@@ -826,7 +806,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                     
                     if (UTF16Count > 0)
                     {
-                        // Generate glyphs with KB library
                         int Prepped = 0;
                         glyph_hash RunHash = ComputeGlyphHash(2 * UTF16Count, (char unsigned *)UTF16Buffer, DefaultSeed);
                         glyph_dim GlyphDim = GetGlyphDim(&Terminal->GlyphGen, Terminal->GlyphTable, UTF16Count, UTF16Buffer, RunHash);
