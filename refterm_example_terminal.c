@@ -375,6 +375,27 @@ static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cu
 // Forward declaration for debug output
 static void AppendOutput(example_terminal *Terminal, char *Format, ...);
 
+// Debug log file handle (shared across calls)
+static HANDLE g_hDebugLog = INVALID_HANDLE_VALUE;
+
+// Helper function to write to debug log file
+static void WriteDebugLog(const char *format, ...)
+{
+    if (g_hDebugLog != INVALID_HANDLE_VALUE)
+    {
+        char buffer[1024];
+        va_list args;
+        va_start(args, format);
+        int len = wvsprintfA(buffer, format, args);
+        va_end(args);
+        
+        DWORD written;
+        WriteFile(g_hDebugLog, buffer, len, &written, NULL);
+        // Flush to ensure data is written immediately
+        FlushFileBuffers(g_hDebugLog);
+    }
+}
+
 // ParseWithKB: Enhanced version with critical fixes applied
 // 
 // CRITICAL FIXES IMPLEMENTED:
@@ -388,6 +409,31 @@ static void AppendOutput(example_terminal *Terminal, char *Format, ...);
 static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Range, cursor_state *Cursor)
 {
     kb_partitioner *KBPartitioner = &Terminal->KBPartitioner;
+    
+    // Always create debug log file for testing (remove this later)
+    if (g_hDebugLog == INVALID_HANDLE_VALUE)
+    {
+        g_hDebugLog = CreateFileA("kb_debug_always.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, 
+                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (g_hDebugLog != INVALID_HANDLE_VALUE)
+        {
+            WriteDebugLog("=== ParseWithKB Called (Always Log) ===\r\n");
+            WriteDebugLog("DebugHighlighting = %d, Input size = %zu bytes\r\n", 
+                         Terminal->DebugHighlighting, UTF8Range.Count);
+        }
+    }
+    
+    // Debug: Create/append to log file when debug mode is on
+    if (Terminal->DebugHighlighting && g_hDebugLog == INVALID_HANDLE_VALUE)
+    {
+        g_hDebugLog = CreateFileA("kb_debug.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, 
+                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (g_hDebugLog != INVALID_HANDLE_VALUE)
+        {
+            WriteDebugLog("=== KB Debug Log Started ===\r\n");
+            WriteDebugLog("ParseWithKB called with %zu bytes of UTF-8 input\r\n", UTF8Range.Count);
+        }
+    }
     
     // Initialize KB break state
     kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
@@ -423,6 +469,8 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             {
                 AppendOutput(Terminal, "[UTF8] Decoded codepoint U+%04X at position %u, consumed %u bytes\n", 
                            Decode.Codepoint, CurrentPosition, Decode.SourceCharactersConsumed);
+                WriteDebugLog("[UTF8] Decoded codepoint U+%04X at position %u, consumed %u bytes\r\n",
+                             Decode.Codepoint, CurrentPosition, Decode.SourceCharactersConsumed);
             }
             
             // Track space character positions for additional break opportunities
