@@ -22472,7 +22472,7 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                     kbts_ligature *Ligature = kbts_GetLigature(Set, LigatureIndex);
                     kbts_u16 *Ids = KBTS_POINTER_AFTER(kbts_u16, Ligature);
 
-                    SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Ligature->ComponentCount - 1) + 1;
+                    SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Ligature->ComponentCount - 1)) + 1;
 
                     KBTS_FOR(IdIndex, 1, Ligature->ComponentCount)
                     {
@@ -22502,7 +22502,7 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                       KBTS_FOR(RuleIndex, 0, Set->Count)
                       {
                         kbts_sequence_rule *Rule = kbts_GetSequenceRule(Set, RuleIndex);
-                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Rule->GlyphCount - 1) + 1;
+                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Rule->GlyphCount - 1)) + 1;
 
                         kbts_u16 *SequenceIds = KBTS_POINTER_AFTER(kbts_u16, Rule);
                         KBTS_FOR(InputIndex, 1, Rule->GlyphCount)
@@ -22534,7 +22534,7 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                         kbts_class_sequence_rule *Rule = kbts_GetClassSequenceRule(Set, RuleIndex);
                         kbts_u16 *SequenceClasses = KBTS_POINTER_AFTER(kbts_u16, Rule);
 
-                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Rule->GlyphCount - 1) + 1;
+                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Rule->GlyphCount - 1)) + 1;
 
                         KBTS_FOR(SequenceIndex, 1, Rule->GlyphCount)
                         {
@@ -22553,7 +22553,7 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                   kbts_sequence_context_3 *Subst = (kbts_sequence_context_3 *)Base;
                   kbts_u16 *CoverageOffsets = KBTS_POINTER_AFTER(kbts_u16, Subst);
 
-                  SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Subst->GlyphCount - 1) + 1;
+                  SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Subst->GlyphCount - 1)) + 1;
 
                   InPrimary = 0;
                   KBTS_FOR(CoverageIndex, 0, Subst->GlyphCount)
@@ -22591,8 +22591,8 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                       kbts_chained_sequence_rule *Rule = kbts_GetChainedClassSequenceRule(Set, RuleIndex);
                       kbts_unpacked_chained_sequence_rule Unpacked = kbts_UnpackChainedSequenceRule(Rule, 0);
 
-                      SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount) + 1;
-                      SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Unpacked.InputCount - 1 + Unpacked.LookaheadCount) + 1;
+                      SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount)) + 1;
+                      SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Unpacked.InputCount - 1 + Unpacked.LookaheadCount)) + 1;
 
                       KBTS_FOR(BacktrackIndex, 0, Unpacked.BacktrackCount)
                       {
@@ -22642,8 +22642,8 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                         kbts_chained_sequence_rule *Rule = kbts_GetChainedSequenceRule(Set, RuleIndex);
                         kbts_unpacked_chained_sequence_rule Unpacked = kbts_UnpackChainedSequenceRule(Rule, 0);
 
-                        SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount) + 1;
-                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Unpacked.InputCount - 1 + Unpacked.LookaheadCount) + 1;
+                        SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount)) + 1;
+                        SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Unpacked.InputCount - 1 + Unpacked.LookaheadCount)) + 1;
 
                         KBTS_FOR(BacktrackIndex, 0, Unpacked.BacktrackCount)
                         {
@@ -22678,8 +22678,8 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                   kbts_chained_sequence_context_3 *Subst = (kbts_chained_sequence_context_3 *)Base;
                   kbts_unpacked_chained_sequence_context_3 Unpacked = kbts_UnpackChainedSequenceContext3(Subst, 0);
 
-                  SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount) + 1;
-                  SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Unpacked.InputCount - 1 + Unpacked.LookaheadCount) + 1;
+                  SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount)) + 1;
+                  SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Unpacked.InputCount - 1 + Unpacked.LookaheadCount)) + 1;
 
                   KBTS_FOR(BacktrackCoverageIndex, 0, Unpacked.BacktrackCount)
                   {
@@ -22728,8 +22728,8 @@ KBTS_EXPORT int kbts_PostReadFontInitialize(kbts_font *Font, void *Memory, kbts_
                 kbts_reverse_chain_substitution *Subst = (kbts_reverse_chain_substitution *)Base;
                 kbts_unpacked_reverse_chain_substitution Unpacked = kbts_UnpackReverseChainSubstitution(Subst, 0);
 
-                SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount) + 1;
-                SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN(SubtableInfo.MinimumFollowupPlusOne - 1, Unpacked.LookaheadCount) + 1;
+                SubtableInfo.MinimumBacktrackPlusOne = KBTS_MIN(SubtableInfo.MinimumBacktrackPlusOne - 1, Unpacked.BacktrackCount)) + 1;
+                SubtableInfo.MinimumFollowupPlusOne = KBTS_MIN((kbts_s32)(SubtableInfo.MinimumFollowupPlusOne - 1), (kbts_s32)( Unpacked.LookaheadCount)) + 1;
 
                 KBTS_FOR(BacktrackIndex, 0, Unpacked.BacktrackCount)
                 {
