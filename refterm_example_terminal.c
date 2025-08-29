@@ -430,7 +430,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         
         if (Decode.Valid)
         {
-            if (Terminal->DebugHighlighting && CurrentPosition < 10) // Limit debug output for first 10 codepoints
+            if (Terminal->DebugHighlighting && CurrentPosition < 10)
             {
                 AppendOutput(Terminal, "[UTF8] Decoded codepoint U+%04X at position %u, consumed %u bytes\n", 
                            Decode.Codepoint, CurrentPosition, Decode.SourceCharactersConsumed);
@@ -496,7 +496,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     while (kbts_Break(&KBPartitioner->BreakState, &Break))
     {
         BreakCount++;
-        if (Terminal->DebugHighlighting && BreakCount <= 20) // Limit debug output for first 20 breaks
+        if (Terminal->DebugHighlighting && BreakCount <= 20)
         {
             AppendOutput(Terminal, "[BREAK] Break #%u at position %u, flags=0x%08X\n", 
                        BreakCount, Break.Position, Break.Flags);
@@ -1537,7 +1537,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
 
     ShowWindow(Terminal->Window, SW_SHOWDEFAULT);
 
-    AppendOutput(Terminal, "\n"); // TODO(casey): Better line startup - this is here just to initialize the running cursor.
+    AppendOutput(Terminal, "\n");
     AppendOutput(Terminal, "Refterm v%u\n", REFTERM_VERSION);
     AppendOutput(Terminal,
                      "THIS IS \x1b[38;2;255;0;0m\x1b[5mNOT\x1b[0m A REAL \x1b[9mTERMINAL\x1b[0m.\r\n"
@@ -1549,7 +1549,7 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
     AppendOutput(Terminal, OpeningMessage);
     AppendOutput(Terminal, "\n");
     
-    int BlinkMS = 500; // TODO(casey): Use this in blink determination
+    int BlinkMS = 500;
     int MinTermSize = 512;
     uint32_t Width = MinTermSize;
     uint32_t Height = MinTermSize;
@@ -1615,13 +1615,13 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
 
             if(!SlowIn && (Terminal->Legacy_ReadStdOut != INVALID_HANDLE_VALUE))
             {
-                CloseHandle(Terminal->Legacy_ReadStdOut); // TODO(casey): Not sure if this is supposed to be called?
+                CloseHandle(Terminal->Legacy_ReadStdOut);
                 Terminal->Legacy_ReadStdOut = INVALID_HANDLE_VALUE;
             }
 
             if(!ErrIn && (Terminal->Legacy_ReadStdError != INVALID_HANDLE_VALUE))
             {
-                CloseHandle(Terminal->Legacy_ReadStdError); // TODO(casey): Not sure if this is supposed to be called?
+                CloseHandle(Terminal->Legacy_ReadStdError);
                 Terminal->Legacy_ReadStdError = INVALID_HANDLE_VALUE;
             }
         }

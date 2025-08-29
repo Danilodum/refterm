@@ -37,7 +37,7 @@ int main()
     printf("=== ParseWithKB Debug Test ===\n\n");
     
     example_terminal Terminal = {0};
-    Terminal.DebugHighlighting = 1; // Enable debug output
+    Terminal.DebugHighlighting = 1;
     
     ZeroMemory(&Terminal.KBPartitioner, sizeof(kb_partitioner));
     
