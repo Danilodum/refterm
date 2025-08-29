@@ -380,7 +380,7 @@ static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cu
 // 3. Error Handling: Validates break state using kbts_BreakStateIsValid() to prevent silent failures
 // 4. Complex Script Detection: Uses script complexity detection for appropriate break strategies
 //
-// This function replaces the Uniscribe-based text shaping with KB library-based processing
+// This function uses KB library for text shaping and line breaking
 // while maintaining compatibility with the existing rendering pipeline.
 static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Range, cursor_state *Cursor)
 {
@@ -389,7 +389,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     // Initialize KB break state
     kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
     
-    // Process UTF-8 string directly (no conversion needed like Uniscribe)
+    // Process UTF-8 string directly with KB library
     size_t StringAt = 0;
     uint32_t CurrentPosition = 0;
     
@@ -462,7 +462,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         {
             ShouldBreak = 1;
         }
-        // For complex scripts: Use soft line breaks for segmentation (matches Uniscribe fSoftBreak)
+        // For complex scripts: Use soft line breaks for segmentation
         else if ((CurrentScript != KBTS_SCRIPT_DONT_KNOW && kbts_ScriptIsComplex(CurrentScript)) || HasRTL)
         {
             if (Break.Flags & KBTS_BREAK_FLAG_LINE_SOFT)
@@ -470,7 +470,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                 ShouldBreak = 1;
             }
         }
-        // For simple scripts: Use character boundaries for segmentation (matches Uniscribe fCharStop)
+        // For simple scripts: Use character boundaries for segmentation
         else
         {
             if (Break.Flags & KBTS_BREAK_FLAG_GRAPHEME)
@@ -554,11 +554,11 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         }
     }
     
-    // Process segments similar to Uniscribe version
+    // Process segments with KB library
     int Segment = 0;
     
     // RTL Support: When RTL is detected, reverse the segment processing order
-    // This matches the original Uniscribe logic at lines 444-448
+    // This follows the original buffer run logic
     // RTL text needs to be processed from right-to-left, so we reverse the segment iteration
     int dSeg = 1;
     uint32_t SegStart = 0;
@@ -664,7 +664,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                     
                     if (UTF16Count > 0)
                     {
-                        // Generate glyphs (similar to Uniscribe path)
+                        // Generate glyphs with KB library
                         int Prepped = 0;
                         glyph_hash RunHash = ComputeGlyphHash(2 * UTF16Count, (char unsigned *)UTF16Buffer, DefaultSeed);
                         glyph_dim GlyphDim = GetGlyphDim(&Terminal->GlyphGen, Terminal->GlyphTable, UTF16Count, UTF16Buffer, RunHash);
@@ -738,20 +738,20 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
                recombine properly with Unicode.  I _DO NOT_ think this should be fixed in
                the line parser.  Instead, the fix should be what should happen here to begin
                with, which is that the glyph chunking should happen in a state machine,
-               NOT using buffer runs like Uniscribe does.
+               NOT using buffer runs like the original implementation.
 
                So I believe the _correct_ design here is that you have a state machine instead
-               of Uniscribe for complex grapheme clusters, and _that_ will "just work" here
+               of the original segmentation for complex grapheme clusters, and _that_ will "just work" here
                as well as being much much faster than the current path, which is very slow
-               because of Uniscribe _and_ is limited to intermediate buffer sizes.
+               because of the original segmentation _and_ is limited to intermediate buffer sizes.
             */
 
             // NOTE(casey): If it's not an escape, and this line contains fancy Unicode stuff,
             // it's something we need to pass to a shaper to find out how it
-            // has to be segmented.  Which sadly is Uniscribe at this point :(
+            // has to be segmented.  Which is now handled by KB library :)
             // Putting something actually good in here would probably be a massive improvement.
 
-            // NOTE(casey): Scan for the next escape code (which Uniscribe helpfully totally fails to handle)
+            // NOTE(casey): Scan for the next escape code (which the original library failed to handle)
             source_buffer_range SubRange = Range;
             do
             {
