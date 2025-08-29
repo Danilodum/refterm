@@ -434,7 +434,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     kbts_direction CurrentDirection = KBTS_DIRECTION_LTR;
     
     // Track script information during break processing
-    kbts_script CurrentScript = KBTS_SCRIPT_UNKNOWN;
+    kbts_script CurrentScript = KBTS_SCRIPT_DONT_KNOW;
     
     while (kbts_Break(&KBPartitioner->BreakState, &Break))
     {
@@ -463,7 +463,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             ShouldBreak = 1;
         }
         // For complex scripts: Use soft line breaks for segmentation (matches Uniscribe fSoftBreak)
-        else if ((CurrentScript != KBTS_SCRIPT_UNKNOWN && kbts_ScriptIsComplex(CurrentScript)) || HasRTL)
+        else if ((CurrentScript != KBTS_SCRIPT_DONT_KNOW && kbts_ScriptIsComplex(CurrentScript)) || HasRTL)
         {
             if (Break.Flags & KBTS_BREAK_FLAG_LINE_SOFT)
             {
@@ -585,7 +585,7 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             int IsComplex = 0;
             
             // Use proper script complexity detection instead of heuristic
-            if (CurrentScript != KBTS_SCRIPT_UNKNOWN)
+            if (CurrentScript != KBTS_SCRIPT_DONT_KNOW)
             {
                 IsComplex = kbts_ScriptIsComplex(CurrentScript);
             }
