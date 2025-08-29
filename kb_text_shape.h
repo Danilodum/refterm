@@ -16760,7 +16760,7 @@ static int kbts_GrowGlyphArray(kbts_u32 *ResumePoint_, kbts_glyph_array *Array, 
 
     if(!DoNotModifyGlyphCounts)
     {
-      Array->Count += GrowCount;
+      Array->Count += (kbts_u32)GrowCount;
       Array->TotalCount = (kbts_u32)NewTotalCount;
     }
     Result = 1;
@@ -18377,8 +18377,8 @@ static kbts_substitution_result_flags kbts_DoSubstitution(kbts_shape_state *Shap
             // To move to the “next” glyph, the client skips all the glyphs that participated in the lookup operation:
             // glyphs that were substituted/positioned as well as any other glyphs in the matched input sequence.
 
-            GlyphArray->Count += DeltaGlyphCount;
-            GlyphArray->TotalCount += DeltaGlyphCount;
+            GlyphArray->Count += (kbts_u32)DeltaGlyphCount;
+            GlyphArray->TotalCount += (kbts_u32)DeltaGlyphCount;
           }
         }
       }
@@ -21475,8 +21475,8 @@ KBTS_EXPORT int kbts_Shape(kbts_shape_state *State, kbts_shape_config *Config, k
 
       {
         kbts_begin_cluster_result BeginClusterResult = kbts_BeginCluster(State, Glyphs + State->At, GlyphArray->Count - State->At);
-        GlyphArray->Count += BeginClusterResult.InsertedGlyphCount;
-        GlyphArray->TotalCount += BeginClusterResult.InsertedGlyphCount;
+        GlyphArray->Count += (kbts_u32)BeginClusterResult.InsertedGlyphCount;
+        GlyphArray->TotalCount += (kbts_u32)BeginClusterResult.InsertedGlyphCount;
         State->ClusterGlyphCount = (kbts_u32)BeginClusterResult.ClusterGlyphCount;
         *Cluster = kbts_GlyphArray(Glyphs + State->At, BeginClusterResult.ClusterGlyphCount, GlyphArray->Count - State->At, GlyphCapacity - State->At);
       }
@@ -21521,8 +21521,8 @@ KBTS_EXPORT int kbts_Shape(kbts_shape_state *State, kbts_shape_config *Config, k
 
       State->At += Cluster->Count;
       kbts_un DeltaClusterGlyphCount = Cluster->Count - State->ClusterGlyphCount;
-      GlyphArray->Count += DeltaClusterGlyphCount;
-      GlyphArray->TotalCount += DeltaClusterGlyphCount;
+      GlyphArray->Count += (kbts_u32)DeltaClusterGlyphCount;
+      GlyphArray->TotalCount += (kbts_u32)DeltaClusterGlyphCount;
       State->ClusterAtStartOfWord = State->WordBreak;
     }
 
