@@ -155,8 +155,6 @@ void WinMainCRTStartup()
     }
 }
 
-// CRT stuff
-
 int _fltused = 0x9875;
 
 #pragma function(memset)

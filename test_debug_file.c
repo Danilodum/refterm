@@ -19,7 +19,6 @@ typedef struct {
     kb_partitioner KBPartitioner;
 } example_terminal;
 
-// Forward declaration
 void ParseWithKB(example_terminal *Terminal, buffer UTF8Range);
 
 void AppendOutput(example_terminal *Terminal, char *Format, ...)
@@ -37,14 +36,11 @@ int main()
 {
     printf("=== ParseWithKB Debug Test ===\n\n");
     
-    // Create test terminal
     example_terminal Terminal = {0};
     Terminal.DebugHighlighting = 1; // Enable debug output
     
-    // Initialize KBPartitioner
     ZeroMemory(&Terminal.KBPartitioner, sizeof(kb_partitioner));
     
-    // Test 1: Simple ASCII
     printf("Test 1: Simple ASCII\n");
     printf("--------------------\n");
     char test1[] = "Hello World";
@@ -52,7 +48,6 @@ int main()
     ParseWithKB(&Terminal, utf8_1);
     printf("\n");
     
-    // Test 2: Unicode
     printf("Test 2: Unicode Emoji\n");
     printf("---------------------\n");
     char test2[] = "Test 😀 emoji";
@@ -60,7 +55,6 @@ int main()
     ParseWithKB(&Terminal, utf8_2);
     printf("\n");
     
-    // Test 3: RTL
     printf("Test 3: RTL Arabic\n");
     printf("------------------\n");
     char test3[] = "مرحبا";

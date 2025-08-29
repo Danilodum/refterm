@@ -253,7 +253,6 @@ static int ParseEscape(example_terminal *Terminal, source_buffer_range *Range, c
     {
         case 'H':
         {
-            // NOTE(casey): Move cursor to X,Y position
             Cursor->At.X = Params[1] - 1;
             Cursor->At.Y = Params[0] - 1;
             MovedCursor = 1;
@@ -261,7 +260,6 @@ static int ParseEscape(example_terminal *Terminal, source_buffer_range *Range, c
 
         case 'm':
         {
-            // NOTE(casey): Set graphics mode
             if(Params[0] == 0)
             {
                 ClearProps(Terminal, &Cursor->Props);
@@ -854,7 +852,6 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
 
     while(Range.Count)
     {
-        // NOTE(casey): Eat all non-Unicode
         char Peek = PeekToken(&Range, 0);
         if((Peek == '\x1b') && AtEscape(&Range))
         {
@@ -887,12 +884,6 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
                because of the original segmentation _and_ is limited to intermediate buffer sizes.
             */
 
-            // NOTE(casey): If it's not an escape, and this line contains fancy Unicode stuff,
-            // it's something we need to pass to a shaper to find out how it
-            // has to be segmented.  Which is now handled by KB library :)
-            // Putting something actually good in here would probably be a massive improvement.
-
-            // NOTE(casey): Scan for the next escape code (which the original library failed to handle)
             source_buffer_range SubRange = Range;
             do
             {
@@ -903,14 +894,11 @@ static int ParseLineIntoGlyphs(example_terminal *Terminal, source_buffer_range R
                         (Range.Data[0] != '\x1b'));
 
 
-            // NOTE(casey): Pass the range between the escape codes to KB
             SubRange.Count = Range.AbsoluteP - SubRange.AbsoluteP;
             ParseWithKB(Terminal, SubRange, Cursor);
         }
         else
         {
-            // NOTE(casey): It's not an escape, and we know there are only simple characters on the line.
-
             wchar_t CodePoint = GetToken(&Range);
             renderer_cell *Cell = GetCell(&Terminal->ScreenBuffer, Cursor->At);
             if(Cell)
@@ -1260,7 +1248,6 @@ RefreshFont(example_terminal *Terminal)
         TransferTile(&Terminal->GlyphGen, &Terminal->Renderer, 0, Terminal->ReservedTileTable[TileIndex]);
     }
 
-    // NOTE(casey): Clear the reserved 0 tile
     wchar_t Nothing = 0;
     gpu_glyph_index ZeroTile = {0};
     PrepareTilesForTransfer(&Terminal->GlyphGen, &Terminal->Renderer, 0, &Nothing, UnitDim);
@@ -1515,7 +1502,6 @@ static DWORD WINAPI TerminalThread(LPVOID Param)
     Terminal->FastPipeTrigger.hEvent = Terminal->FastPipeReady;
     Terminal->PipeSize = 16*1024*1024;
     
-    // Initialize KBPartitioner to prevent undefined behavior
     ZeroMemory(&Terminal->KBPartitioner, sizeof(kb_partitioner));
 
     ClearCursor(Terminal, &Terminal->RunningCursor);
