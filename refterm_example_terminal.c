@@ -372,6 +372,9 @@ static void ParseLines(example_terminal *Terminal, source_buffer_range Range, cu
 }
 
 
+// Forward declaration for debug output
+static void AppendOutput(example_terminal *Terminal, char *Format, ...);
+
 // ParseWithKB: Enhanced version with critical fixes applied
 // 
 // CRITICAL FIXES IMPLEMENTED:
@@ -389,6 +392,12 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     // Initialize KB break state
     kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
     
+    if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[KB_INIT] Initialized KB break state with direction=NONE, style=NORMAL\n");
+        AppendOutput(Terminal, "[KB_INIT] Processing UTF-8 range: %zu bytes\n", UTF8Range.Count);
+    }
+    
     // Process UTF-8 string directly with KB library
     size_t StringAt = 0;
     uint32_t CurrentPosition = 0;
@@ -398,6 +407,11 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     uint32_t SpacePositions[1024];
     uint32_t SpaceCount = 0;
     
+    if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[UTF8] Starting UTF-8 decoding loop for %zu bytes\n", UTF8Range.Count);
+    }
+    
     while (StringAt < UTF8Range.Count)
     {
         kbts_decode Decode = kbts_DecodeUtf8(UTF8Range.Data + StringAt, UTF8Range.Count - StringAt);
@@ -405,16 +419,35 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         
         if (Decode.Valid)
         {
+            if (Terminal->DebugHighlighting && CurrentPosition < 10) // Limit debug output for first 10 codepoints
+            {
+                AppendOutput(Terminal, "[UTF8] Decoded codepoint U+%04X at position %u, consumed %u bytes\n", 
+                           Decode.Codepoint, CurrentPosition, Decode.SourceCharactersConsumed);
+            }
+            
             // Track space character positions for additional break opportunities
             if (Decode.Codepoint == ' ' && SpaceCount < ArrayCount(SpacePositions))
             {
                 SpacePositions[SpaceCount++] = CurrentPosition;
+                if (Terminal->DebugHighlighting)
+                {
+                    AppendOutput(Terminal, "[UTF8] Found space at position %u (space #%u)\n", CurrentPosition, SpaceCount);
+                }
             }
             
             int EndOfText = (StringAt >= UTF8Range.Count);
             kbts_BreakAddCodepoint(&KBPartitioner->BreakState, Decode.Codepoint, 1, EndOfText);
             CurrentPosition++;
         }
+        else if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[UTF8] Invalid UTF-8 sequence at byte offset %zu\n", StringAt - Decode.SourceCharactersConsumed);
+        }
+    }
+    
+    if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[UTF8] Completed decoding: %u codepoints, %u spaces found\n", CurrentPosition, SpaceCount);
     }
     
     // Extract breaks and build segments
@@ -424,6 +457,16 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
     {
         KBPartitioner->SegP[KBPartitioner->SegmentCount++] = 0; // Start of first segment
+        if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[BOUNDS] Added segment start at position 0, SegmentCount now %u/%u\n", 
+                       KBPartitioner->SegmentCount, ArrayCount(KBPartitioner->SegP));
+        }
+    }
+    else if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[BOUNDS] ERROR: Cannot add segment start - SegP array full (%u/%u)\n", 
+                   KBPartitioner->SegmentCount, ArrayCount(KBPartitioner->SegP));
     }
     
     uint32_t LastBreakPosition = 0;
@@ -436,8 +479,21 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
     // Track script information during break processing
     kbts_script CurrentScript = KBTS_SCRIPT_DONT_KNOW;
     
+    if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[BREAK] Starting break processing loop\n");
+    }
+    
+    uint32_t BreakCount = 0;
     while (kbts_Break(&KBPartitioner->BreakState, &Break))
     {
+        BreakCount++;
+        if (Terminal->DebugHighlighting && BreakCount <= 20) // Limit debug output for first 20 breaks
+        {
+            AppendOutput(Terminal, "[BREAK] Break #%u at position %u, flags=0x%08X\n", 
+                       BreakCount, Break.Position, Break.Flags);
+        }
+        
         // Detect RTL text using kb break flags
         if (Break.Flags & KBTS_BREAK_FLAG_DIRECTION)
         {
@@ -445,6 +501,15 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             if (Break.Direction == KBTS_DIRECTION_RTL)
             {
                 HasRTL = 1;
+                if (Terminal->DebugHighlighting)
+                {
+                    AppendOutput(Terminal, "[BREAK] RTL direction detected at position %u\n", Break.Position);
+                }
+            }
+            else if (Terminal->DebugHighlighting)
+            {
+                AppendOutput(Terminal, "[BREAK] Direction changed to %s at position %u\n", 
+                           (Break.Direction == KBTS_DIRECTION_LTR) ? "LTR" : "UNKNOWN", Break.Position);
             }
         }
         
@@ -452,6 +517,11 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         if (Break.Flags & KBTS_BREAK_FLAG_SCRIPT)
         {
             CurrentScript = Break.Script;
+            if (Terminal->DebugHighlighting)
+            {
+                AppendOutput(Terminal, "[BREAK] Script changed to %u at position %u\n", 
+                           CurrentScript, Break.Position);
+            }
         }
         
         // Implement different break strategies based on script complexity and break type
@@ -492,17 +562,40 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             {
                 KBPartitioner->SegP[KBPartitioner->SegmentCount++] = Break.Position;
                 LastBreakPosition = Break.Position;
+                if (Terminal->DebugHighlighting)
+                {
+                    AppendOutput(Terminal, "[BOUNDS] Added break at position %u, SegmentCount now %u/%u\n", 
+                               Break.Position, KBPartitioner->SegmentCount, ArrayCount(KBPartitioner->SegP));
+                }
+            }
+            else if (Terminal->DebugHighlighting)
+            {
+                AppendOutput(Terminal, "[BOUNDS] ERROR: Cannot add break - SegP array full at position %u\n", Break.Position);
             }
         }
+    }
+    
+    if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[BREAK] Completed break processing: %u breaks processed, HasRTL=%d, CurrentScript=%u\n", 
+                   BreakCount, HasRTL, CurrentScript);
     }
     
     // Error handling: Check if break state is valid after processing
     if (!kbts_BreakStateIsValid(&KBPartitioner->BreakState))
     {
+        if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[ERROR] Break state is invalid after processing - restarting\n");
+        }
         // Handle invalid state - for now, we'll restart with a fresh state
         // In production code, you might want to log this error or handle it differently
         kbts_BeginBreak(&KBPartitioner->BreakState, KBTS_DIRECTION_NONE, KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL);
         return;
+    }
+    else if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[BREAK] Break state is valid\n");
     }
     
     // Add space character positions as additional break points (matches original ScriptBreak behavior)
@@ -525,6 +618,15 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
             if (!AlreadyExists && KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
             {
                 KBPartitioner->SegP[KBPartitioner->SegmentCount++] = SpacePos;
+                if (Terminal->DebugHighlighting)
+                {
+                    AppendOutput(Terminal, "[BOUNDS] Added space break at position %u, SegmentCount now %u\n", 
+                               SpacePos, KBPartitioner->SegmentCount);
+                }
+            }
+            else if (Terminal->DebugHighlighting && KBPartitioner->SegmentCount >= ArrayCount(KBPartitioner->SegP))
+            {
+                AppendOutput(Terminal, "[BOUNDS] ERROR: Cannot add space break - SegP array full\n");
             }
         }
     }
@@ -551,6 +653,15 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         if (KBPartitioner->SegmentCount < ArrayCount(KBPartitioner->SegP))
         {
             KBPartitioner->SegP[KBPartitioner->SegmentCount++] = CurrentPosition;
+            if (Terminal->DebugHighlighting)
+            {
+                AppendOutput(Terminal, "[BOUNDS] Added final position %u, SegmentCount now %u\n", 
+                           CurrentPosition, KBPartitioner->SegmentCount);
+            }
+        }
+        else if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[BOUNDS] ERROR: Cannot add final position - SegP array full\n");
         }
     }
     
@@ -570,6 +681,17 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         dSeg = -1;
         SegStart = KBPartitioner->SegmentCount - 2;
         SegStop = UINT32_MAX; // Will wrap around, effectively -1 for uint32_t comparison
+        
+        if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[RTL] RTL processing enabled: start=%u, stop=%u, step=%d\n", 
+                       SegStart, SegStop, dSeg);
+        }
+    }
+    else if (Terminal->DebugHighlighting)
+    {
+        AppendOutput(Terminal, "[RTL] LTR processing: start=%u, stop=%u, step=%d, HasRTL=%d, SegmentCount=%u\n", 
+                   SegStart, SegStop, dSeg, HasRTL, KBPartitioner->SegmentCount);
     }
     
     for (uint32_t SegIndex = SegStart; SegIndex != SegStop; SegIndex += dSeg)
@@ -577,7 +699,17 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
         // Bounds checking to prevent buffer overflow
         if (SegIndex >= 1026 || (SegIndex + 1) >= 1026)
         {
+            if (Terminal->DebugHighlighting)
+            {
+                AppendOutput(Terminal, "[SEG] ERROR: Segment bounds exceeded at index %u - stopping\n", SegIndex);
+            }
             break; // Prevent out-of-bounds access
+        }
+        
+        if (Terminal->DebugHighlighting)
+        {
+            AppendOutput(Terminal, "[SEG] Processing segment %u: range [%u, %u)\n", 
+                       SegIndex, KBPartitioner->SegP[SegIndex], KBPartitioner->SegP[SegIndex + 1]);
         }
         
         uint32_t Start = KBPartitioner->SegP[SegIndex];
@@ -667,6 +799,17 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
                     // Handle complex text - convert to UTF-16 for glyph generation
                     wchar_t UTF16Buffer[1024];
                     DWORD UTF16Count = MultiByteToWideChar(CP_UTF8, 0, UTF8Segment, (DWORD)UTF8SegmentLength, UTF16Buffer, ArrayCount(UTF16Buffer));
+                    
+                    if (Terminal->DebugHighlighting)
+                    {
+                        AppendOutput(Terminal, "[CONV] UTF-8 to UTF-16: %zu bytes -> %u UTF-16 units (segment %u)\n", 
+                                   UTF8SegmentLength, UTF16Count, SegIndex);
+                        if (UTF16Count == 0)
+                        {
+                            DWORD Error = GetLastError();
+                            AppendOutput(Terminal, "[CONV] ERROR: Conversion failed with error %u\n", Error);
+                        }
+                    }
                     
                     if (UTF16Count > 0)
                     {
