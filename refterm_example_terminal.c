@@ -410,19 +410,6 @@ static void ParseWithKB(example_terminal *Terminal, source_buffer_range UTF8Rang
 {
     kb_partitioner *KBPartitioner = &Terminal->KBPartitioner;
     
-    // Always create debug log file for testing (remove this later)
-    if (g_hDebugLog == INVALID_HANDLE_VALUE)
-    {
-        g_hDebugLog = CreateFileA("kb_debug_always.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, 
-                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (g_hDebugLog != INVALID_HANDLE_VALUE)
-        {
-            WriteDebugLog("=== ParseWithKB Called (Always Log) ===\r\n");
-            WriteDebugLog("DebugHighlighting = %d, Input size = %zu bytes\r\n", 
-                         Terminal->DebugHighlighting, UTF8Range.Count);
-        }
-    }
-    
     // Debug: Create/append to log file when debug mode is on
     if (Terminal->DebugHighlighting && g_hDebugLog == INVALID_HANDLE_VALUE)
     {
