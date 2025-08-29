@@ -16,7 +16,8 @@
 #include <intrin.h>
 #include <strsafe.h>
 
-#define KBTS_STATIC
+#define KB_TEXT_SHAPE_STATIC
+#define KB_TEXT_SHAPE_IMPLEMENTATION
 #include "kb_text_shape.h"
 #include <stdarg.h>
 
